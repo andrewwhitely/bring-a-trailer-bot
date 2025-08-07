@@ -1,0 +1,28 @@
+{
+  "name": "discord-bat-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that posts Bring a Trailer RSS feed updates to a channel",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "node test-rss.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "rss",
+    "bring-a-trailer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "rss-parser": "^3.13.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
