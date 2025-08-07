@@ -249,7 +249,12 @@ This 1973 BMW R75/5 is a long wheelbase example that was acquired by the seller 
                 .replace(/&gt;/g, '>')
                 .replace(/&quot;/g, '"')
                 .replace(/&#39;/g, "'")
-                .replace(/&apos;/g, "'");
+                .replace(/&apos;/g, "'")
+                .replace(/<!\[CDATA\[/g, '')  // Remove CDATA start
+                .replace(/\]\]>/g, '')        // Remove CDATA end
+                .replace(/<[^>]*>/g, '')      // Remove HTML tags
+                .replace(/\s+/g, ' ')         // Normalize whitespace
+                .trim();                       // Remove leading/trailing whitespace
             }
 
             const title = decodeXMLEntities(extractTag(itemContent, 'title'));

@@ -43,7 +43,12 @@ function decodeXMLEntities(text) {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/<!\[CDATA\[/g, '')  // Remove CDATA start
+    .replace(/\]\]>/g, '')        // Remove CDATA end
+    .replace(/<[^>]*>/g, '')      // Remove HTML tags
+    .replace(/\s+/g, ' ')         // Normalize whitespace
+    .trim();                       // Remove leading/trailing whitespace
 }
 
 // Test with a sample RSS feed
