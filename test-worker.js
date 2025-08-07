@@ -14,13 +14,14 @@ function parseRSSFeed(xmlText) {
     const link = extractTag(itemContent, 'link');
     const description = extractTag(itemContent, 'description');
     const pubDate = extractTag(itemContent, 'pubDate');
+    const content = extractTag(itemContent, 'content:encoded') || description;
 
     if (title && link) {
       items.push({
         title: decodeXMLEntities(title),
         link: decodeXMLEntities(link),
         description: decodeXMLEntities(description),
-        content: decodeXMLEntities(content),
+        content: decodeXMLEntitiesForImages(content),
         pubDate: pubDate,
       });
     }
@@ -44,11 +45,24 @@ function decodeXMLEntities(text) {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
-    .replace(/<!\[CDATA\[/g, '')  // Remove CDATA start
-    .replace(/\]\]>/g, '')        // Remove CDATA end
-    .replace(/<[^>]*>/g, '')      // Remove HTML tags
-    .replace(/\s+/g, ' ')         // Normalize whitespace
-    .trim();                       // Remove leading/trailing whitespace
+    .replace(/<!\[CDATA\[/g, '') // Remove CDATA start
+    .replace(/\]\]>/g, '') // Remove CDATA end
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim(); // Remove leading/trailing whitespace
+}
+
+function decodeXMLEntitiesForImages(text) {
+  if (!text) return '';
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/<!\[CDATA\[/g, '') // Remove CDATA start
+    .replace(/\]\]>/g, ''); // Remove CDATA end but keep HTML tags
 }
 
 // Test with a sample RSS feed
@@ -74,11 +88,36 @@ async function testRSSParsing() {
       );
 
       // Check for images
-      const imageMatch = latestItem.content?.match(/<img[^>]+src="([^"]+)"/);
-      if (imageMatch) {
-        console.log(`   Image: ${imageMatch[1]}`);
+      if (latestItem.content) {
+        const imagePatterns = [
+          /<img[^>]+src="([^"]+)"/i,
+          /<img[^>]+src='([^']+)'/i,
+          /background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i,
+          /<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i,
+          /<meta[^>]+name="twitter:image"[^>]+content="([^"]+)"/i,
+        ];
+        
+        let imageUrl = null;
+        for (const pattern of imagePatterns) {
+          const match = latestItem.content.match(pattern);
+          if (match && match[1]) {
+            imageUrl = match[1];
+            break;
+          }
+        }
+        
+        if (imageUrl) {
+          // Clean up the URL
+          imageUrl = imageUrl
+            .replace(/&#038;/g, '&')  // Fix encoded ampersands
+            .replace(/&amp;/g, '&')   // Fix HTML entities
+            .split('?')[0];           // Remove query parameters
+          console.log(`   Image: ${imageUrl}`);
+        } else {
+          console.log('   Image: No image found');
+        }
       } else {
-        console.log('   Image: No image found');
+        console.log('   Image: No content to search');
       }
     }
 

@@ -44,7 +44,7 @@ function parseRSSFeed(xmlText) {
         title: decodeXMLEntities(title),
         link: decodeXMLEntities(link),
         description: decodeXMLEntities(description),
-        content: decodeXMLEntities(content),
+        content: decodeXMLEntitiesForImages(content),
         pubDate: pubDate,
       });
     }
@@ -75,6 +75,19 @@ function decodeXMLEntities(text) {
     .trim(); // Remove leading/trailing whitespace
 }
 
+function decodeXMLEntitiesForImages(text) {
+  if (!text) return '';
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/<!\[CDATA\[/g, '') // Remove CDATA start
+    .replace(/\]\]>/g, ''); // Remove CDATA end but keep HTML tags
+}
+
 // Function to create Discord embed for a listing
 function createListingEmbed(item) {
   const embed = {
@@ -87,7 +100,6 @@ function createListingEmbed(item) {
     timestamp: new Date(item.pubDate).toISOString(),
     footer: {
       text: 'Bring a Trailer',
-      icon_url: 'https://bringatrailer.com/favicon.ico',
     },
   };
 
@@ -112,13 +124,17 @@ function createListingEmbed(item) {
     }
 
     if (imageUrl) {
-      // Clean up the URL (remove query parameters that might cause issues)
-      imageUrl = imageUrl.split('?')[0];
+      // Clean up the URL
+      imageUrl = imageUrl
+        .replace(/&#038;/g, '&') // Fix encoded ampersands
+        .replace(/&amp;/g, '&') // Fix HTML entities
+        .split('?')[0]; // Remove query parameters
 
       // Validate the URL
       try {
         new URL(imageUrl);
         embed.image = { url: imageUrl };
+        console.log('🖼️ Added image to embed:', imageUrl);
       } catch (error) {
         console.log('⚠️ Invalid image URL, skipping:', imageUrl);
       }
