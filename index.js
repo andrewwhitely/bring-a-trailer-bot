@@ -126,7 +126,7 @@ function createListingEmbed(item) {
 // Function to post to Discord webhook
 async function postToDiscord(embed) {
   try {
-    const webhookUrl = DISCORD_WEBHOOK_URL;
+    const webhookUrl = env.DISCORD_WEBHOOK_URL;
     if (!webhookUrl) {
       console.error('❌ DISCORD_WEBHOOK_URL not configured');
       return false;
