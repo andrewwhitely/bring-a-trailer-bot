@@ -3,7 +3,6 @@
 
 // Configuration
 const RSS_FEED_URL = 'https://bringatrailer.com/feed/';
-const DISCORD_WEBHOOK_URL = env.DISCORD_WEBHOOK_URL; // Will be set via environment variable
 
 // Store the last processed item to avoid duplicates
 let lastProcessedItem = null;
@@ -201,11 +200,8 @@ export default {
 
   // HTTP request handler (for testing)
   async fetch(request, env, ctx) {
-    // Set environment variables from Cloudflare Workers
-    DISCORD_WEBHOOK_URL = env.DISCORD_WEBHOOK_URL;
-
     // Validate webhook URL
-    if (!DISCORD_WEBHOOK_URL) {
+    if (!env.DISCORD_WEBHOOK_URL) {
       return new Response('❌ DISCORD_WEBHOOK_URL not configured', {
         status: 500,
       });
