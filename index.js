@@ -124,9 +124,8 @@ function createListingEmbed(item) {
 }
 
 // Function to post to Discord webhook
-async function postToDiscord(embed) {
+async function postToDiscord(embed, webhookUrl) {
   try {
-    const webhookUrl = env.DISCORD_WEBHOOK_URL;
     if (!webhookUrl) {
       console.error('❌ DISCORD_WEBHOOK_URL not configured');
       return false;
@@ -154,13 +153,14 @@ async function postToDiscord(embed) {
       return false;
     }
   } catch (error) {
+    console.log('error:: ', error);
     console.error('❌ Error posting to Discord:', error.message);
     return false;
   }
 }
 
 // Function to check for new listings and post them
-async function checkForNewListings() {
+async function checkForNewListings(webhookUrl) {
   try {
     const items = await fetchRSSFeed();
 
@@ -176,7 +176,7 @@ async function checkForNewListings() {
       console.log(`🚗 New listing found: ${latestItem.title}`);
 
       const embed = createListingEmbed(latestItem);
-      const success = await postToDiscord(embed);
+      const success = await postToDiscord(embed, webhookUrl);
 
       if (success) {
         // Update last processed item
@@ -195,7 +195,7 @@ export default {
   // Scheduled event (runs every 5 minutes)
   async scheduled(event, env, ctx) {
     console.log('⏰ Scheduled RSS feed check triggered');
-    await checkForNewListings();
+    await checkForNewListings(env.DISCORD_WEBHOOK_URL);
   },
 
   // HTTP request handler (for testing)
@@ -225,7 +225,7 @@ export default {
     }
 
     if (url.pathname === '/check') {
-      await checkForNewListings();
+      await checkForNewListings(env.DISCORD_WEBHOOK_URL);
       return new Response('Check completed', { status: 200 });
     }
 
