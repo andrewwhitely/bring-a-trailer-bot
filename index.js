@@ -215,7 +215,7 @@ export default {
           status: 'OK',
           timestamp: new Date().toISOString(),
           rss_feed: RSS_FEED_URL,
-          webhook_configured: !!DISCORD_WEBHOOK_URL,
+          webhook_configured: !!env.DISCORD_WEBHOOK_URL,
         }),
         {
           status: 200,
