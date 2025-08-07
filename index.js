@@ -1,75 +1,163 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-const Parser = require('rss-parser');
-const cron = require('node-cron');
-require('dotenv').config();
+// Cloudflare Workers Discord Bot for Bring a Trailer RSS
+// This runs as a scheduled worker that checks RSS and posts to Discord
 
-// Initialize Discord client
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
-
-// Initialize RSS parser
-const parser = new Parser();
+// Configuration
+const RSS_FEED_URL = 'https://bringatrailer.com/feed/';
+const DISCORD_WEBHOOK_URL = ''; // Will be set via environment variable
 
 // Store the last processed item to avoid duplicates
 let lastProcessedItem = null;
 
-// Configuration
-const RSS_FEED_URL = process.env.RSS_FEED_URL;
-const CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
-const CHECK_INTERVAL = process.env.CHECK_INTERVAL;
-
-// Validate required environment variables
-if (!process.env.DISCORD_TOKEN) {
-  console.error('❌ DISCORD_TOKEN is required in .env file');
-  process.exit(1);
-}
-
-if (!CHANNEL_ID) {
-  console.error('❌ DISCORD_CHANNEL_ID is required in .env file');
-  process.exit(1);
-}
-
 // Function to fetch and parse RSS feed
 async function fetchRSSFeed() {
   try {
-    const feed = await parser.parseURL(RSS_FEED_URL);
-    return feed.items;
+    console.log('📡 Fetching RSS feed...');
+    const response = await fetch(RSS_FEED_URL);
+    const text = await response.text();
+
+    // Simple RSS parsing (since we can't use rss-parser in Workers)
+    const items = parseRSSFeed(text);
+    console.log(`✅ Found ${items.length} items in RSS feed`);
+    return items;
   } catch (error) {
     console.error('❌ Error fetching RSS feed:', error.message);
     return [];
   }
 }
 
-// Function to create Discord embed for a listing
-function createListingEmbed(item) {
-  const embed = new EmbedBuilder()
-    .setColor('#FF6B35')
-    .setTitle(item.title)
-    .setURL(item.link)
-    .setDescription(item.contentSnippet || 'No description available')
-    .setTimestamp(new Date(item.pubDate))
-    .setFooter({
-      text: 'Bring a Trailer',
-      iconURL: 'https://bringatrailer.com/favicon.ico',
-    });
+// Simple RSS parser for Cloudflare Workers
+function parseRSSFeed(xmlText) {
+  const items = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+  let match;
 
-  // Try to extract image from content
-  const imageMatch = item.content.match(/<img[^>]+src="([^"]+)"/);
-  if (imageMatch) {
-    embed.setImage(imageMatch[1]);
+  while ((match = itemRegex.exec(xmlText)) !== null) {
+    const itemContent = match[1];
+
+    const title = extractTag(itemContent, 'title');
+    const link = extractTag(itemContent, 'link');
+    const description = extractTag(itemContent, 'description');
+    const pubDate = extractTag(itemContent, 'pubDate');
+    const content = extractTag(itemContent, 'content:encoded') || description;
+
+    if (title && link) {
+      items.push({
+        title: decodeXMLEntities(title),
+        link: decodeXMLEntities(link),
+        description: decodeXMLEntities(description),
+        content: decodeXMLEntities(content),
+        pubDate: pubDate,
+      });
+    }
   }
 
-  // Add author if available
-  if (item.creator) {
-    embed.setAuthor({ name: item.creator });
+  return items;
+}
+
+function extractTag(content, tagName) {
+  const regex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i');
+  const match = content.match(regex);
+  return match ? match[1].trim() : null;
+}
+
+function decodeXMLEntities(text) {
+  if (!text) return '';
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+}
+
+// Function to create Discord embed for a listing
+function createListingEmbed(item) {
+  const embed = {
+    color: 0xff6b35,
+    title: item.title,
+    url: item.link,
+    description: item.description
+      ? item.description.substring(0, 2000)
+      : 'No description available',
+    timestamp: new Date(item.pubDate).toISOString(),
+    footer: {
+      text: 'Bring a Trailer',
+      icon_url: 'https://bringatrailer.com/favicon.ico',
+    },
+  };
+
+  // Try to extract image from content
+  if (item.content) {
+    // Look for various image patterns
+    const imagePatterns = [
+      /<img[^>]+src="([^"]+)"/i,
+      /<img[^>]+src='([^']+)'/i,
+      /background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i,
+      /<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i,
+      /<meta[^>]+name="twitter:image"[^>]+content="([^"]+)"/i,
+    ];
+
+    let imageUrl = null;
+    for (const pattern of imagePatterns) {
+      const match = item.content.match(pattern);
+      if (match && match[1]) {
+        imageUrl = match[1];
+        break;
+      }
+    }
+
+    if (imageUrl) {
+      // Clean up the URL (remove query parameters that might cause issues)
+      imageUrl = imageUrl.split('?')[0];
+
+      // Validate the URL
+      try {
+        new URL(imageUrl);
+        embed.image = { url: imageUrl };
+      } catch (error) {
+        console.log('⚠️ Invalid image URL, skipping:', imageUrl);
+      }
+    }
   }
 
   return embed;
+}
+
+// Function to post to Discord webhook
+async function postToDiscord(embed) {
+  try {
+    const webhookUrl = DISCORD_WEBHOOK_URL;
+    if (!webhookUrl) {
+      console.error('❌ DISCORD_WEBHOOK_URL not configured');
+      return false;
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        embeds: [embed],
+      }),
+    });
+
+    if (response.ok) {
+      console.log('✅ Posted new listing to Discord');
+      return true;
+    } else {
+      console.error(
+        '❌ Failed to post to Discord:',
+        response.status,
+        response.statusText
+      );
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error posting to Discord:', error.message);
+    return false;
+  }
 }
 
 // Function to check for new listings and post them
@@ -88,24 +176,13 @@ async function checkForNewListings() {
     if (!lastProcessedItem || latestItem.link !== lastProcessedItem.link) {
       console.log(`🚗 New listing found: ${latestItem.title}`);
 
-      // Post to Discord channel
-      const channel = client.channels.cache.get(CHANNEL_ID);
-      if (channel) {
-        try {
-          const embed = createListingEmbed(latestItem);
-          await channel.send({ embeds: [embed] });
-          console.log('✅ Posted new listing to Discord');
-        } catch (error) {
-          console.error('❌ Error posting to Discord:', error.message);
-        }
-      } else {
-        console.error(
-          `❌ Could not find Discord channel with ID: ${CHANNEL_ID}`
-        );
-      }
+      const embed = createListingEmbed(latestItem);
+      const success = await postToDiscord(embed);
 
-      // Update last processed item
-      lastProcessedItem = latestItem;
+      if (success) {
+        // Update last processed item
+        lastProcessedItem = latestItem;
+      }
     } else {
       console.log('ℹ️ No new listings found');
     }
@@ -114,44 +191,48 @@ async function checkForNewListings() {
   }
 }
 
-// Bot ready event
-client.once('ready', () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log('🤖 Bot is ready to monitor Bring a Trailer RSS feed');
+// Cloudflare Workers event handler
+export default {
+  // Scheduled event (runs every 5 minutes)
+  async scheduled(event, env, ctx) {
+    console.log('⏰ Scheduled RSS feed check triggered');
+    await checkForNewListings();
+  },
 
-  // Start the cron job to check for new listings
-  cron.schedule(CHECK_INTERVAL, () => {
-    console.log('⏰ Checking for new listings...');
-    checkForNewListings();
-  });
+  // HTTP request handler (for testing)
+  async fetch(request, env, ctx) {
+    // Set environment variables from Cloudflare Workers
+    DISCORD_WEBHOOK_URL = env.DISCORD_WEBHOOK_URL;
 
-  console.log(`⏰ Scheduled RSS feed checks every ${CHECK_INTERVAL}`);
+    // Validate webhook URL
+    if (!DISCORD_WEBHOOK_URL) {
+      return new Response('❌ DISCORD_WEBHOOK_URL not configured', {
+        status: 500,
+      });
+    }
 
-  // Initial check
-  console.log('🚀 Performing initial RSS feed check...');
-  checkForNewListings();
-});
+    const url = new URL(request.url);
 
-// Error handling
-client.on('error', (error) => {
-  console.error('❌ Discord client error:', error);
-});
+    if (url.pathname === '/health') {
+      return new Response(
+        JSON.stringify({
+          status: 'OK',
+          timestamp: new Date().toISOString(),
+          rss_feed: RSS_FEED_URL,
+          webhook_configured: !!DISCORD_WEBHOOK_URL,
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
-// Handle process termination gracefully
-process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down bot...');
-  client.destroy();
-  process.exit(0);
-});
+    if (url.pathname === '/check') {
+      await checkForNewListings();
+      return new Response('Check completed', { status: 200 });
+    }
 
-process.on('SIGTERM', () => {
-  console.log('\n🛑 Shutting down bot...');
-  client.destroy();
-  process.exit(0);
-});
-
-// Login to Discord
-client.login(process.env.DISCORD_TOKEN).catch((error) => {
-  console.error('❌ Failed to login to Discord:', error.message);
-  process.exit(1);
-});
+    return new Response('Discord BAT Bot is running!', { status: 200 });
+  },
+};

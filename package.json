@@ -1,28 +1,26 @@
 {
   "name": "discord-bat-bot",
   "version": "1.0.0",
-  "description": "Discord bot that posts Bring a Trailer RSS feed updates to a channel",
+  "description": "Discord bot that posts Bring a Trailer RSS feed updates to a channel using Cloudflare Workers",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "node test-rss.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test-worker.js",
+    "test:worker": "wrangler dev --local",
+    "preview": "node preview-server.js",
+    "preview:stop": "pkill -f 'node preview-server.js'"
   },
   "keywords": [
     "discord",
     "bot",
     "rss",
-    "bring-a-trailer"
+    "bring-a-trailer",
+    "cloudflare-workers"
   ],
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "discord.js": "^14.14.1",
-    "rss-parser": "^3.13.0",
-    "node-cron": "^3.0.3",
-    "dotenv": "^16.3.1"
-  },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "wrangler": "^3.0.0"
   }
 }

@@ -1,0 +1,12 @@
+name = "discord-bat-bot"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "discord-bat-bot"
+
+[env.staging]
+name = "discord-bat-bot-staging"
+
+# Environment variables will be set via wrangler secret
+# wrangler secret put DISCORD_WEBHOOK_URL 
