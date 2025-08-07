@@ -3,7 +3,7 @@
 
 // Configuration
 const RSS_FEED_URL = 'https://bringatrailer.com/feed/';
-const DISCORD_WEBHOOK_URL = ''; // Will be set via environment variable
+const DISCORD_WEBHOOK_URL = env.DISCORD_WEBHOOK_URL; // Will be set via environment variable
 
 // Store the last processed item to avoid duplicates
 let lastProcessedItem = null;
